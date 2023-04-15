@@ -2,6 +2,7 @@ import styles from '../styles/Index.module.css'
 import Link from 'next/link'
 import { useState } from 'react'
 import { useRouter } from 'next/router'
+import { setCookie } from 'cookies-next'
 import API from '../api'
 
 export default function Home() {
@@ -25,6 +26,8 @@ export default function Home() {
     API.login(body)
       .then(res => {
         if(res.data.success) {
+          setCookie('accesstoken', res.data.accesstoken)
+          setCookie('refreshtoken', res.data.refreshtoken)
           router.push('/success')
         }
       })

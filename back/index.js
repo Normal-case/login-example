@@ -5,6 +5,8 @@ const bodyParser = require('body-parser')
 const fs = require('fs')
 const bcrypt = require('bcrypt')
 const rounds = 10 // Key Stretching
+const Token = require('./bin/Token')
+const { authenticate } = require('./middleware/authenticate')
 const PORT = '8000'
 
 const whitelist = ["http://localhost:3000"]
@@ -33,6 +35,13 @@ app.post('/login', (req, res) => {
         )
     }
 
+    // token.json 파일이 존재하지 않을 때 초기화
+    if(!fs.existsSync('token.json')) {
+        fs.writeFileSync('token.json', JSON.stringify(
+            {'username': [], 'refresh': []}
+        ))
+    }
+
     var userString = fs.readFileSync('user.json').toString()
     var userJSON = JSON.parse(userString)
     const userIdx = userJSON['username'].indexOf(req.body.username)
@@ -47,7 +56,30 @@ app.post('/login', (req, res) => {
         return res.status(400).json({ success: false, msg: 'Id or psword is wrong' })
     }
 
-    return res.status(200).json({ success: true })
+    // 토큰 생성
+    const payload = { username: req.body.username }
+    const Atoken = Token.manager.generate(payload, true)
+    const Rtoken = Token.manager.generate(payload, false)
+
+    var refreshString = fs.readFileSync('token.json').toString()
+    var refreshJSON = JSON.parse(refreshString)
+    const refreshIdx = refreshJSON['username'].indexOf(req.body.username)
+    
+    // token이 이미 존재하는 경우
+    if(refreshIdx > -1) {
+        refreshJSON['username'].splice(refreshIdx, 1)
+        refreshJSON['refresh'].splice(refreshIdx, 1)
+    }
+
+    refreshJSON['username'].push(req.body.username)
+    refreshJSON['refresh'].push(Rtoken)
+    fs.writeFileSync('token.json', JSON.stringify(refreshJSON))
+
+    return res.status(200).json({
+        success: true,
+        accesstoken: Atoken,
+        refreshtoken: Rtoken
+    })
 })
 
 app.post('/register', (req, res) => {
@@ -75,6 +107,10 @@ app.post('/register', (req, res) => {
     userJSON['password'].push(encryptedPs)
     fs.writeFileSync('user.json', JSON.stringify(userJSON))
     return res.status(200).json({ success: true })
+})
+
+app.get('/profile', authenticate, (req, res) => {
+    return res.status(200).json({ success: true, accesstoken: req.access })
 })
 
 app.listen(PORT, () => {
